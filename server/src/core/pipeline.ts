@@ -308,27 +308,20 @@ function collectAllLocations(locations: LocationBlock[]): LocationBlock[] {
   return result;
 }
 
-/** 访问控制检查 */
+/** 访问控制检查 — 按配置文件顺序检查，先匹配先生效 */
 function checkAccessControl(directives: Directive[], clientIp: string): { allowed: boolean; rules: string[]; matchedRule?: string } {
   const rules: string[] = [];
-  const allowRules = findDirectives(directives, 'allow');
-  const denyRules = findDirectives(directives, 'deny');
-
-  for (const deny of denyRules) {
-    rules.push(`deny ${deny.parameters[0]}`);
-    if (matchesIp(clientIp, deny.parameters[0])) {
-      return { allowed: false, rules, matchedRule: `deny ${deny.parameters[0]}` };
+  // 按指令在配置文件中出现的顺序逐一检查
+  for (const d of directives) {
+    if (d.name === 'allow' || d.name === 'deny') {
+      const ip = d.parameters[0];
+      rules.push(`${d.name} ${ip}`);
+      if (matchesIp(clientIp, ip)) {
+        return { allowed: d.name === 'allow', rules, matchedRule: `${d.name} ${ip}` };
+      }
     }
   }
-
-  for (const allow of allowRules) {
-    rules.push(`allow ${allow.parameters[0]}`);
-    if (matchesIp(clientIp, allow.parameters[0])) {
-      return { allowed: true, rules, matchedRule: `allow ${allow.parameters[0]}` };
-    }
-  }
-
-  // 没有规则时默认允许
+  // 没有匹配的规则时默认允许
   return { allowed: true, rules: rules.length > 0 ? rules : ['默认允许'] };
 }
 
