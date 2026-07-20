@@ -1,0 +1,15 @@
+{
+  "name": "nginx-simulator",
+  "version": "1.0.0",
+  "description": "Nginx 工作原理模拟器 - 通过代码模拟 nginx 路由、负载均衡等核心功能",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
