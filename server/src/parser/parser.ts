@@ -144,27 +144,36 @@ export class Parser {
 
     // 解析服务器参数
     while (!this.check(TokenType.SEMICOLON) && !this.isEOF()) {
-      const key = this.peek()?.value;
-      if (key === 'weight') {
-        this.advance();
-        server.weight = parseInt(this.expect(TokenType.NUMBER).value, 10);
-      } else if (key === 'max_fails') {
-        this.advance();
-        server.maxFails = parseInt(this.expect(TokenType.NUMBER).value, 10);
-      } else if (key === 'fail_timeout') {
-        this.advance();
-        server.failTimeout = this.parseTime(this.expect(TokenType.NUMBER).value);
+      let raw = this.peek()?.value || '';
+      let key = raw;
+      let val: string | null = null;
+
+      // 处理 key=value 格式（如 weight=3，可能被词法分析器合并为一个 token）
+      if (raw.includes('=')) {
+        const eqIdx = raw.indexOf('=');
+        key = raw.substring(0, eqIdx);
+        val = raw.substring(eqIdx + 1);
+        this.advance(); // 消费这个合并的 token
+      } else {
+        this.advance(); // 消费 key token
+        // 如果下一个 token 是 =，跳过并读取后面的值
+        if (this.peek()?.value === '=') {
+          this.advance(); // 跳过 =
+          val = this.peek()?.value || null;
+          if (val) this.advance();
+        }
+      }
+
+      if (key === 'weight' && val) {
+        server.weight = parseInt(val, 10);
+      } else if (key === 'max_fails' && val) {
+        server.maxFails = parseInt(val, 10);
+      } else if (key === 'fail_timeout' && val) {
+        server.failTimeout = this.parseTime(val);
       } else if (key === 'backup') {
-        this.advance();
         server.backup = true;
       } else if (key === 'down') {
-        this.advance();
         server.down = true;
-      } else if (key === '=') {
-        // 跳过等号
-        this.advance();
-      } else {
-        this.advance();
       }
     }
     this.expect(TokenType.SEMICOLON);

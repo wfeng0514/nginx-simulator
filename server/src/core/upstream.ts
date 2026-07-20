@@ -48,7 +48,9 @@ export function selectServer(state: UpstreamGroupState, clientIp: string | null)
 
   switch (state.algorithm) {
     case 'round_robin':
-      selected = roundRobin(healthy, state);
+      // 如果配置了 weight，自动升级为加权轮询（nginx 默认行为）
+      const hasWeightRR = healthy.some((s) => s.weight > 1);
+      selected = hasWeightRR ? weightedRoundRobin(healthy, state) : roundRobin(healthy, state);
       break;
     case 'least_conn':
       selected = leastConnections(healthy);
