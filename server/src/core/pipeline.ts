@@ -7,7 +7,7 @@ import {
   MatchResult, UpstreamGroupState,
 } from './types';
 import { matchServer, matchLocation } from './matcher';
-import { selectServer, releaseServer } from './upstream';
+import { selectServer, releaseServer, initUpstreamState } from './upstream';
 
 /** 创建处理步骤 */
 function step(
@@ -97,7 +97,7 @@ export function executePipeline(
     { allowed: serverAccessResult.allowed, matchedRule: serverAccessResult.matchedRule }, serverAccessResult.allowed));
 
   if (!serverAccessResult.allowed) {
-    return finishResponse(steps, order, 403, 'Forbidden', headers, 'Access Denied', serverName, null, null, null, null);
+    return finishResponse(steps, order, 403, 'Forbidden', headers, 'Access Denied', serverName, null, '', null, null, null);
   }
 
   // Phase 4: Server 级 Rewrite
@@ -244,8 +244,11 @@ export function executePipeline(
 
   // 释放上游连接
   if (upstreamServer && upstreamName) {
-    const [addr, portStr] = upstreamServer.split(':');
-    releaseServer(upstreamStates.get(upstreamName)!, addr, parseInt(portStr) || 80);
+    const state = upstreamStates.get(upstreamName);
+    if (state) {
+      const [addr, portStr] = upstreamServer.split(':');
+      releaseServer(state, addr, parseInt(portStr) || 80);
+    }
   }
 
   return {
@@ -430,7 +433,6 @@ function handleContent(
       let upState = upstreamStates.get(upName);
 
       if (!upState && upDef) {
-        const { initUpstreamState } = require('./upstream');
         upState = initUpstreamState(upDef);
         upstreamStates.set(upName, upState);
       }

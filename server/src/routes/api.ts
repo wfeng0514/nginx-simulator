@@ -2,7 +2,6 @@
 import { Router, Request, Response } from 'express';
 import { NginxSimulator } from '../core/simulator';
 import { HttpRequest } from '../core/types';
-import { v4 as uuidv4 } from 'uuid'; // simple uuid fallback
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
