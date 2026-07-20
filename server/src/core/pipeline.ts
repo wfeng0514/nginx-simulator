@@ -430,14 +430,46 @@ function handleContent(
         upstreamStates.set(upName, upState);
       }
 
+      // 收集 proxy_set_header 指令
+      const proxyHeaders: Record<string, string> = {};
+      const proxySetHeaders = findDirectives(directives, 'proxy_set_header');
+      for (const ph of proxySetHeaders) {
+        const name = ph.parameters[0];
+        // 解析变量占位
+        let value = ph.parameters.slice(1).join(' ');
+        value = value.replace(/\$host/g, request.host)
+                     .replace(/\$remote_addr/g, request.clientIp)
+                     .replace(/\$proxy_add_x_forwarded_for/g, request.clientIp + ', ' + request.headers['x-forwarded-for'] || request.clientIp)
+                     .replace(/\$request_uri/g, request.uri)
+                     .replace(/\$scheme/g, request.scheme);
+        proxyHeaders[name] = value;
+      }
+      // 收集超时配置
+      const connectTimeout = findDirective(directives, 'proxy_connect_timeout');
+      const readTimeout = findDirective(directives, 'proxy_read_timeout');
+      const timeoutInfo: Record<string, string> = {};
+      if (connectTimeout) timeoutInfo['connect'] = connectTimeout.parameters[0];
+      if (readTimeout) timeoutInfo['read'] = readTimeout.parameters[0];
+
       if (upState) {
         const selected = selectServer(upState, request.clientIp);
         if (selected) {
           const serverAddr = `${selected.address}:${selected.port}`;
           return {
             action: `proxy_pass → upstream ${upName} (${upState.algorithm}) → ${serverAddr}`,
-            input: { proxyPass: target, upstream: upName, algorithm: upState.algorithm, servers: upState.servers.map(s => `${s.address}:${s.port}`) },
-            output: { selectedServer: serverAddr, weight: selected.weight },
+            input: {
+              proxyPass: target,
+              upstream: upName,
+              algorithm: upState.algorithm,
+              servers: upState.servers.map(s => `${s.address}:${s.port}`),
+              proxyHeaders: Object.keys(proxyHeaders).length > 0 ? proxyHeaders : undefined,
+              timeouts: Object.keys(timeoutInfo).length > 0 ? timeoutInfo : undefined,
+            },
+            output: {
+              selectedServer: serverAddr,
+              weight: selected.weight,
+              forwardedHeaders: Object.keys(proxyHeaders).length > 0 ? proxyHeaders : undefined,
+            },
             statusCode: 200, statusText: 'OK',
             body: `{"message":"模拟上游响应","upstream":"${upName}","server":"${serverAddr}","uri":"${uri}"}`,
             upstreamServer: serverAddr, upstreamName: upName, upstreamAlgorithm: upState.algorithm,
@@ -446,11 +478,35 @@ function handleContent(
       }
     }
 
+    // 收集 proxy_set_header（非 upstream 情况也适用）
+    const proxyHeaders: Record<string, string> = {};
+    const proxySetHeaders = findDirectives(directives, 'proxy_set_header');
+    for (const ph of proxySetHeaders) {
+      const name = ph.parameters[0];
+      let value = ph.parameters.slice(1).join(' ');
+      value = value.replace(/\$host/g, request.host)
+                   .replace(/\$remote_addr/g, request.clientIp)
+                   .replace(/\$scheme/g, request.scheme);
+      proxyHeaders[name] = value;
+    }
+    const connectTimeout = findDirective(directives, 'proxy_connect_timeout');
+    const readTimeout = findDirective(directives, 'proxy_read_timeout');
+    const timeoutInfo: Record<string, string> = {};
+    if (connectTimeout) timeoutInfo['connect'] = connectTimeout.parameters[0];
+    if (readTimeout) timeoutInfo['read'] = readTimeout.parameters[0];
+
     // 直接 URL
     return {
       action: `proxy_pass → ${target}`,
-      input: { proxyPass: target },
-      output: { proxied: true },
+      input: {
+        proxyPass: target,
+        proxyHeaders: Object.keys(proxyHeaders).length > 0 ? proxyHeaders : undefined,
+        timeouts: Object.keys(timeoutInfo).length > 0 ? timeoutInfo : undefined,
+      },
+      output: {
+        proxied: true,
+        forwardedHeaders: Object.keys(proxyHeaders).length > 0 ? proxyHeaders : undefined,
+      },
       statusCode: 200, statusText: 'OK',
       body: `{"message":"模拟代理响应","target":"${target}","uri":"${uri}"}`,
       upstreamServer: target, upstreamName: null, upstreamAlgorithm: null,
